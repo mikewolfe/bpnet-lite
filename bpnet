@@ -130,7 +130,8 @@ default_fit_parameters = {
 	'loci': None,
 	'signals': None,
 	'controls': None,
-	'random_state': None
+	'random_state': None,
+    'device' : 'cuda'
 }
 
 default_predict_parameters = {
@@ -144,7 +145,8 @@ default_predict_parameters = {
 	'controls': None,
 	'model': None,
 	'profile_filename': 'y_profile.npz',
-	'counts_filename': 'y_counts.npz'
+	'counts_filename': 'y_counts.npz',
+    'device' : 'cuda'
 }
 
 default_attribute_parameters = {
@@ -161,7 +163,8 @@ default_attribute_parameters = {
 	'attr_filename': 'attr.npz',
 	'n_shuffles':20,
 	'random_state':0,
-	'warning_threshold':1e-4
+	'warning_threshold':1e-4,
+    'device' : 'cuda'
 }
 
 default_marginalize_parameters = {
@@ -178,7 +181,8 @@ default_marginalize_parameters = {
 	'model': None,
 	'output_filename':'marginalize/',
 	'random_state':0,
-	'minimal': True
+	'minimal': True,
+    'device' : 'cuda'
 }
 
 default_pipeline_parameters = {
@@ -368,6 +372,7 @@ if args.cmd == "fit":
 	parameters = merge_parameters(args.parameters, default_fit_parameters)
 
 	###
+	device = parameters['device']
 
 	training_data = PeakGenerator(
 		loci=parameters['loci'], 
@@ -418,7 +423,7 @@ if args.cmd == "fit":
 		alpha=parameters['alpha'],
 		trimming=trimming,
 		name=parameters['name'],
-		verbose=parameters['verbose']).cuda()
+		verbose=parameters['verbose']).to(device)
 
 	optimizer = torch.optim.AdamW(model.parameters(), lr=parameters['lr'])
 
@@ -430,7 +435,8 @@ if args.cmd == "fit":
 		X_ctl_valid=valid_controls, y_valid=valid_signals, 
 		max_epochs=parameters['max_epochs'], 
 		validation_iter=parameters['validation_iter'], 
-		batch_size=parameters['batch_size'])
+		batch_size=parameters['batch_size'],
+        device = device)
 
 
 ##########
@@ -442,7 +448,9 @@ elif args.cmd == 'predict':
 
 	###
 
-	model = torch.load(parameters['model']).cuda()
+	device = parameters['device']
+
+	model = torch.load(parameters['model']).to(device)
 
 	examples = extract_loci(
 		sequences=parameters['sequences'],
@@ -482,8 +490,8 @@ elif args.cmd == 'attribute':
 	parameters = merge_parameters(args.parameters, default_attribute_parameters)
 
 	###
-
-	model = torch.load(parameters['model']).cuda()
+	device = parameters['device']
+	model = torch.load(parameters['model']).to(device)
 
 	dtype = torch.float32
 	if parameters['output'] == 'profile' or isinstance(model, ChromBPNet):
@@ -529,8 +537,9 @@ elif args.cmd == 'marginalize':
 		default_marginalize_parameters)
 
 	###
+	device = parameters['device']
 
-	model = torch.load(parameters['model']).cuda()
+	model = torch.load(parameters['model']).to(device)
 	model = ControlWrapper(model)
 
 	X = extract_loci(

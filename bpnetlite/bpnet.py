@@ -313,7 +313,7 @@ class BPNet(torch.nn.Module):
 
 	def fit(self, training_data, optimizer, X_valid=None, X_ctl_valid=None, 
 		y_valid=None, max_epochs=100, batch_size=64, validation_iter=100, 
-		early_stopping=None, verbose=True):
+		early_stopping=None, verbose=True, device = 'cuda'):
 		"""Fit the model to data and validate it periodically.
 
 		This method controls the training of a BPNet model. It will fit the
@@ -375,11 +375,11 @@ class BPNet(torch.nn.Module):
 		"""
 
 		if X_valid is not None:
-			X_valid = X_valid.cuda()
+			X_valid = X_valid.to(device)
 			y_valid_counts = y_valid.sum(dim=2)
 
 		if X_ctl_valid is not None:
-			X_ctl_valid = (X_ctl_valid.cuda(),)
+			X_ctl_valid = (X_ctl_valid.to(device),)
 
 
 		iteration = 0
@@ -393,10 +393,10 @@ class BPNet(torch.nn.Module):
 			for data in training_data:
 				if len(data) == 3:
 					X, X_ctl, y = data
-					X, X_ctl, y = X.cuda(), X_ctl.cuda(), y.cuda()
+					X, X_ctl, y = X.to(device), X_ctl.to(device), y.to(device)
 				else:
 					X, y = data
-					X, y = X.cuda(), y.cuda()
+					X, y = X.to(device), y.to(device)
 					X_ctl = None
 
 				# Clear the optimizer and set the model to training mode
@@ -434,7 +434,7 @@ class BPNet(torch.nn.Module):
 						tic = time.time()
 						y_profile, y_counts = predict(self, X_valid, 
 							args=X_ctl_valid, batch_size=batch_size, 
-							device='cuda')
+							device=device)
 
 						z = y_profile.shape
 						y_profile = y_profile.reshape(y_profile.shape[0], -1)
