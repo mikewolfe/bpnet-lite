@@ -475,7 +475,7 @@ elif args.cmd == 'predict':
 		X_ctl = (X_ctl,)
 
 	y_profiles, y_counts = predict(model, X, args=X_ctl, 
-		batch_size=parameters['batch_size'], device='cuda', 
+		batch_size=parameters['batch_size'], device=parameters['device'], 
 		verbose=parameters['verbose'])
 
 	numpy.savez_compressed(parameters['profile_filename'], y_profiles)
@@ -522,7 +522,8 @@ elif args.cmd == 'attribute':
 		batch_size=parameters['batch_size'],
 		random_state=parameters['random_state'],
 		verbose=parameters['verbose'],
-		warning_threshold=parameters['warning_threshold'])
+		warning_threshold=parameters['warning_threshold'],
+        device = parameters['device'])
 
 	numpy.savez_compressed(parameters['ohe_filename'], X)
 	numpy.savez_compressed(parameters['attr_filename'], X_attr)
