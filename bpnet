@@ -494,7 +494,7 @@ elif args.cmd == 'attribute':
 	model = torch.load(parameters['model']).to(device)
 
 	dtype = torch.float32
-	if parameters['output'] == 'profile' or isinstance(model, ChromBPNet):
+	if isinstance(model, ChromBPNet):
 		dtype = torch.float64
 
 	X = extract_loci(
