@@ -107,6 +107,8 @@ validation_chroms = ['chr8', 'chr10']
 default_fit_parameters = {
 	'n_filters': 64,
 	'n_layers': 8,
+    'conv1_kernel_size':  21,
+    'tconv_kernel_size':  75,
 	'profile_output_bias': True,
 	'count_output_bias': True,
 	'name': None,
@@ -374,6 +376,16 @@ if args.cmd == "fit":
 	###
 	device = parameters['device']
 
+	try:
+		assert parameters['in_window'] > 2**parameters['n_layers']*3
+	except:
+		raise ValueError('Window not large enough to support %s layers. Need window of at least %s for %s layers. Max number of layers for in_window size of %s is %s. Either increase window size or lower number of layers.'%(
+            parameters['n_layers'],
+            2**parameters['n_layers']*3,
+            parameters['n_layers'],
+            parameters['in_window'],
+            int(numpy.log2(parameters['in_window']/3))))
+
 	training_data = PeakGenerator(
 		loci=parameters['loci'], 
 		sequences=parameters['sequences'],
@@ -412,10 +424,13 @@ if args.cmd == "fit":
 		valid_controls = None
 		n_control_tracks = 0
 
+
 	trimming = (parameters['in_window'] - parameters['out_window']) // 2
 
 	model = BPNet(n_filters=parameters['n_filters'], 
 		n_layers=parameters['n_layers'],
+        conv1_kernel_size = parameters['conv1_kernel_size'],
+        tconv_kernel_size = parameters['tconv_kernel_size'],
 		n_outputs=len(parameters['signals']),
 		n_control_tracks=n_control_tracks,
 		profile_output_bias=parameters['profile_output_bias'],

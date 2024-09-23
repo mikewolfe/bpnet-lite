@@ -186,6 +186,14 @@ class BPNet(torch.nn.Module):
 		The number of dilated residual layers to include in the model.
 		Default is 8.
 
+	conv1_kernel_size: int, optional
+		The size of the stem kernel for the initial convolution. Default is 21.
+		Can be interpreted as the maximum linear size of meaningful motifs
+
+	tconv_kernel_size: int, optional
+		The size of the transpose/de-convolutional final layer for shape
+		prediction. Default is 75.
+
 	n_outputs: int, optional
 		The number of profile outputs from the model. Generally either 1 or 2 
 		depending on if the data is unstranded or stranded. Default is 2.
@@ -222,24 +230,41 @@ class BPNet(torch.nn.Module):
 		screen during training. Default is True.
 	"""
 
-	def __init__(self, n_filters=64, n_layers=8, n_outputs=2, 
-		n_control_tracks=2, alpha=1, profile_output_bias=True, 
-		count_output_bias=True, name=None, trimming=None, verbose=True):
+	def __init__(self, n_filters=64, n_layers=8, conv1_kernel_size = 21, 
+              tconv_kernel_size=75, n_outputs=2, n_control_tracks=2, 
+              alpha=1, profile_output_bias=True, 
+              count_output_bias=True, name=None, trimming=None, verbose=True):
+
 		super(BPNet, self).__init__()
+        
+		# Architecure
 		self.n_filters = n_filters
+		# kernel sizes of stem and profile head
+		self.conv1_kernel_size = conv1_kernel_size
+		self.tconv_kernel_size = tconv_kernel_size
+		# Number of dilation layers. Window must be > (2**n_layers) * 3 or else
+		# learning on mainly padded information
 		self.n_layers = n_layers
+
+		# number of tracks to output
 		self.n_outputs = n_outputs
 		self.n_control_tracks = n_control_tracks
-
+        
+		# Trade off between count loss and profile loss
 		self.alpha = alpha
 		self.name = name or "bpnet.{}.{}".format(n_filters, n_layers)
-		self.trimming = trimming or 2 ** n_layers
 
-		self.iconv = torch.nn.Conv1d(4, n_filters, kernel_size=21, padding=10)
+        # Control the amount of trimming for the output. Still uses information
+        # beyond the trimming size but cuts down the output for the loss function
+        # calculations. Note that window MUST be larger than 2**n_layers * 3 if
+        # allowing the default trim size.
+		self.trimming = 2 ** n_layers if trimming is None else trimming
+
+		self.iconv = torch.nn.Conv1d(4, n_filters, kernel_size=self.conv1_kernel_size, padding='same')
 		self.irelu = torch.nn.ReLU()
 
 		self.rconvs = torch.nn.ModuleList([
-			torch.nn.Conv1d(n_filters, n_filters, kernel_size=3, padding=2**i, 
+			torch.nn.Conv1d(n_filters, n_filters, kernel_size=3, padding='same', 
 				dilation=2**i) for i in range(1, self.n_layers+1)
 		])
 		self.rrelus = torch.nn.ModuleList([
@@ -247,7 +272,7 @@ class BPNet(torch.nn.Module):
 		])
 
 		self.fconv = torch.nn.Conv1d(n_filters+n_control_tracks, n_outputs, 
-			kernel_size=75, padding=37, bias=profile_output_bias)
+			kernel_size=self.tconv_kernel_size, padding='same', bias=profile_output_bias)
 		
 		n_count_control = 1 if n_control_tracks > 0 else 0
 		self.linear = torch.nn.Linear(n_filters+n_count_control, 1, 
@@ -287,6 +312,13 @@ class BPNet(torch.nn.Module):
 		"""
 
 		start, end = self.trimming, X.shape[2] - self.trimming
+		# Make the count calculation cover the same trim space as the 
+		# profile calculation truncating at the maximum size of the window
+		# Have to add the half size of the kernel window to include everything
+		# that is going into the profile. This removes the hard 37 constants
+		# in the original code.
+		kernel_edge = (self.tconv_kernel_size-1)//2
+		count_start, count_end = min(0, start - kernel_edge), max(X.shape[2], end+kernel_edge)
 
 		X = self.irelu(self.iconv(X))
 		for i in range(self.n_layers):
@@ -301,9 +333,9 @@ class BPNet(torch.nn.Module):
 		y_profile = self.fconv(X_w_ctl)[:, :, start:end]
 
 		# counts prediction
-		X = torch.mean(X[:, :, start-37:end+37], dim=2)
+		X = torch.mean(X[:, :, count_start:count_end], dim=2)
 		if X_ctl is not None:
-			X_ctl = torch.sum(X_ctl[:, :, start-37:end+37], dim=(1, 2))
+			X_ctl = torch.sum(X_ctl[:, :, count_start:count_end], dim=(1, 2))
 			X_ctl = X_ctl.unsqueeze(-1)
 			X = torch.cat([X, torch.log(X_ctl+1)], dim=-1)
 
